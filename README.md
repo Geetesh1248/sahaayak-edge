@@ -1,77 +1,114 @@
-# Sahaayak Edge
+# Sahaayak Edge — Offline Lab Assistant
 
-**Sahaayak Edge** is an offline, local RAG-based (Retrieval-Augmented Generation) Q&A assistant designed specifically for engineering lab manuals. 
+Sahaayak Edge is an offline, local RAG-based Q&A assistant for engineering lab manuals.
 
 ## Problem Statement
-Engineering students frequently face unreliable internet access in hardware laboratories and workshops, making it difficult to access online documentation or cloud-based AI assistants when troubleshooting equipment. Sahaayak Edge solves this by providing a completely offline, low-latency AI assistant that references local lab manuals securely on the user's machine.
+
+Engineering students often need answers from long laboratory manuals while working in environments with unreliable internet connectivity. Cloud AI may expose lab documents and student questions, so Sahaayak Edge provides a local, privacy-preserving alternative.
+
+## What is implemented
+
+- Gradio web UI
+- PDF upload
+- pdfplumber page-aware text extraction
+- Text chunking
+- sentence-transformers all-MiniLM-L6-v2 local embeddings
+- FAISS local vector search
+- Ollama local LLM using llama3.2:1b
+- Page-number citations
+- Offline status indicator
+- Retrieval confidence fallback
+- Response latency logging
+
+## What is not implemented yet (Future Work)
+
+- Camera/component recognition
+- Voice input/output
+- Advanced laboratory safety rules
+- Snapdragon NPU benchmark
+- Qualcomm AI Hub production deployment
 
 ## Architecture
 
 ```text
-[User PDF] --> (pdfplumber) --> [Text Chunks] 
-                                      |
-                                      v
-[User Query] --> (sentence-transformers) --> [FAISS Vector Store]
-                                      |
-                                      v
-[Retrieved Context + Query] --> (Local LLM via Ollama) --> [Answer Output]
+  PDF manual
+      |
+      v
+  pdfplumber page-aware extraction
+      |
+      v
+  chunking + local embeddings
+      |
+      v
+  FAISS local retrieval
+      |
+      v
+  confidence check
+      |
+      v
+  Ollama llama3.2:1b local generation
+      |
+      v
+  answer + source page citation
 ```
 
-## Features
-### Implemented
-- **100% Offline Mode**: Operates entirely locally with an offline status indicator.
-- **Local RAG**: Uses `sentence-transformers` for embeddings and a local `FAISS` index for fast retrieval.
-- **Local LLM**: Generates answers using `llama3.2:1b` (via Ollama) to ensure privacy and offline capability.
-- **Citation & Source Page**: Displays the exact page number from the uploaded PDF for the referenced answer.
-- **Low Confidence Fallback**: Refuses to guess when the retrieval confidence is low, advising the student to ask an instructor.
-- **Latency Tracking**: Measures and logs response generation times.
+## Privacy & Offline Behavior
 
-### Planned / Future Work
-- Camera recognition (for equipment identification).
-- Voice I/O (hands-free interaction during lab experiments).
-- Automatic safety rules injection and verification.
+After the one-time model download, document extraction, retrieval, and answer generation are intended to run locally. This preserves privacy and ensures the application can function entirely offline.
 
-## Tech Stack
-- **UI**: Gradio
-- **PDF Extraction**: pdfplumber
-- **Embeddings**: sentence-transformers (all-MiniLM-L6-v2)
-- **Vector Store**: FAISS (cpu)
-- **LLM Engine**: Ollama (llama3.2:1b)
-- **Language**: Python 3.10+
+## Measured Results (CPU-Only)
+
+The current prototype has been validated with the following CPU-only measurements:
+- 7 chunks extracted from the sample lab manual
+- approximately 30 ms retrieval-only latency
+- 3.3–63 seconds full LLM generation on CPU, with high variance
+- offline behavior confirmed with Wi-Fi disabled
+
+## Snapdragon Deployment Plan
+
+The next step is to replace or export compatible model components using ONNX Runtime and/or Qualcomm AI Hub, then validate the application on Snapdragon-powered HP PC hardware. Sub-second generation is a target for this future deployment, not a measured result of the current CPU prototype.
+
+## Test Environment
+
+- CPU-only Windows laptop
+- No Snapdragon NPU was available during development
+
+## Known Limitations
+
+- Current answer quality depends on the uploaded manual
+- Scanned/image-only PDFs may not extract correctly
+- The safety fallback is not a substitute for an instructor
+- Current prototype uses Ollama and requires the local model to be installed
+- Snapdragon performance is not yet validated
 
 ## Setup Instructions
 
-### 1. Prerequisites
-Ensure you have **Python 3.10+** installed.
-You must also have **Ollama** installed on your system. You can download it from [ollama.com](https://ollama.com).
+### Prerequisites
+- Python 3.10+
+- Ollama: Download and install from [ollama.com](https://ollama.com).
 
-Once Ollama is installed, open your terminal and pull the required model:
+### Pull the Local LLM
+Once Ollama is installed, open your terminal and run the exact command to pull the required model:
 ```bash
 ollama pull llama3.2:1b
 ```
 
-### 2. Install Dependencies
-Clone this repository and install the required Python packages:
-
+### Install Dependencies
+Clone the repository, then install requirements:
 ```bash
-git clone https://github.com/Geetesh1248/sahaayak-edge.git
-cd sahaayak-edge
 pip install -r requirements.txt
 ```
 
-### 3. Run the Application
-Execute the main application file:
+### Run the App
 ```bash
 python app.py
 ```
-Open the provided local URL (typically `http://127.0.0.1:7860`) in your web browser.
 
-## Hardware & Deployment Note
-This application was developed and tested on a Windows machine. It is architected with a lightweight model and local retrieval setup, designed specifically for future deployment and acceleration via **ONNX Runtime** and **Qualcomm AI Hub** on **Snapdragon NPU** hardware to maximize performance and battery life on edge devices.
-
-## Known Limitations
-- Heavy PDFs might take a moment to process on older CPUs.
-- The default LLM (`llama3.2:1b`) is small to prioritize speed and low resource usage, so very complex reasoning might be limited compared to larger cloud models.
+## Troubleshooting
+- **Missing Ollama**: If you see connection errors during answer generation, ensure the Ollama app is running in the background.
+- **Missing Model**: If Ollama is running but generation fails, ensure you ran `ollama pull llama3.2:1b`.
+- **Invalid/Image-only PDF**: If no text is extracted, ensure the PDF contains text layers (not just scanned images).
+- **Port Conflicts**: If port 7860 is in use, Gradio will automatically try the next available port. Check the terminal output for the correct URL.
 
 ## License
 MIT License

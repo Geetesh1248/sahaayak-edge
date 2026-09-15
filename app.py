@@ -34,18 +34,21 @@ def process_pdf(pdf_path):
     """Extracts text from PDF, chunks it, and builds a FAISS index."""
     global faiss_index, chunk_data
     
-    if not pdf_path:
-        return "Please upload a PDF."
+    if not pdf_path or not os.path.exists(pdf_path):
+        return "Error: Please upload a valid PDF."
     
     chunk_data = []
     
     # Extract text with page numbers
     try:
         with pdfplumber.open(pdf_path) as pdf:
+            if len(pdf.pages) == 0:
+                return "Error: The uploaded PDF has no pages."
+                
             for page_num, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text()
                 if text:
-                    # Simple chunking by splitting text (this can be improved but serves the MVP well)
+                    # Simple chunking by splitting text
                     words = text.split()
                     for i in range(0, len(words), int(CHUNK_SIZE / 5)): # Roughly 100 words per chunk
                         chunk_words = words[i:i + int(CHUNK_SIZE / 5)]
@@ -59,7 +62,7 @@ def process_pdf(pdf_path):
         return f"Error processing PDF: {e}"
 
     if not chunk_data:
-        return "No text could be extracted from the PDF."
+        return "Error: No text could be extracted. The PDF might be empty or image-only."
 
     # Create Embeddings
     texts = [c["text"] for c in chunk_data]
@@ -80,6 +83,7 @@ def answer_question(question):
         return "Please upload and process a lab manual PDF first.", ""
 
     start_time = time.time()
+    retrieval_start = time.time()
 
     # 1. Retrieve Context
     query_embedding = embedder.encode([question]).astype("float32")
@@ -87,12 +91,14 @@ def answer_question(question):
     
     best_distance = distances[0][0]
     
+    retrieval_latency = (time.time() - retrieval_start) * 1000
+    print(f"Retrieval Latency: {retrieval_latency:.2f} ms")
     print(f"Retrieval - Best Distance: {best_distance:.4f}")
 
     # Fallback for low confidence
     if best_distance > CONFIDENCE_THRESHOLD:
-        latency = (time.time() - start_time) * 1000
-        print(f"Response Latency: {latency:.2f} ms")
+        total_latency = (time.time() - start_time) * 1000
+        print(f"Total Response Latency: {total_latency:.2f} ms")
         return "I'm not confident about this — please verify with your instructor", "Source: N/A (Low Confidence)"
 
     # Gather context chunks
@@ -119,17 +125,23 @@ Answer:"""
     try:
         response = ollama.generate(model=MODEL_NAME, prompt=prompt)
         answer = response['response']
+    except ollama.ResponseError as e:
+        if 'not found' in str(e).lower():
+            answer = f"Error: Model '{MODEL_NAME}' not found. Please run 'ollama pull {MODEL_NAME}' in your terminal."
+        else:
+            answer = f"Error calling Ollama API: {e}"
     except Exception as e:
-        answer = f"Error calling Ollama. Is it running? Details: {e}\n\nMake sure Ollama is installed and you ran 'ollama pull {MODEL_NAME}'"
+        answer = f"Error: Could not connect to Ollama. Is the Ollama app running? Details: {e}"
 
-    latency = (time.time() - start_time) * 1000
-    print(f"Response Latency: {latency:.2f} ms")
+    total_latency = (time.time() - start_time) * 1000
+    print(f"Total Response Latency: {total_latency:.2f} ms")
 
     return answer, source_str
 
 # --- Gradio UI ---
 with gr.Blocks(title="Sahaayak Edge") as demo:
-    gr.Markdown("# Sahaayak Edge - Offline Lab Assistant")
+    gr.Markdown("# Sahaayak Edge — Offline Lab Assistant")
+    gr.Markdown("*CPU prototype validated locally. Snapdragon deployment is the next validation stage.*")
     
     offline_status = gr.Markdown(check_offline_mode())
     
